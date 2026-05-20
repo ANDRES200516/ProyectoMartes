@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675">
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="675" rx="40" fill="url(#grad)"/>
+  <circle cx="320" cy="340" r="110" fill="rgba(255,255,255,0.15)"/>
+  <circle cx="640" cy="240" r="80" fill="rgba(255,255,255,0.12)"/>
+  <path d="M650 160C730 170 790 230 780 310C770 370 710 420 635 425" fill="none" stroke="#fff" stroke-width="18" stroke-linecap="round" opacity="0.9"/>
+  <text x="50%" y="55%" text-anchor="middle" font-family="Inter, sans-serif" font-size="110" font-weight="800" fill="#fff">IA</text>
+  <text x="50%" y="75%" text-anchor="middle" font-family="Inter, sans-serif" font-size="36" fill="#dbeafe">Inteligencia Artificial</text>
+</svg>
