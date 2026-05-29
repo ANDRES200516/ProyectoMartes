@@ -160,7 +160,7 @@ class User {
     }
 
     public function getAdmins() {
-        $query = "SELECT email, username FROM " . $this->table_name . " WHERE role = 'admin'";
+        $query = "SELECT id, username, email FROM " . $this->table_name . " WHERE role = 'admin' AND status = 'active'";
         $stmt = $this->conn->prepare($query);
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);

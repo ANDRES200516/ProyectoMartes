@@ -235,7 +235,8 @@
             </div>
         <?php endif; ?>
 
-        <form action="index.php?action=login" method="POST">
+        <form id="loginForm" action="index.php?action=login" method="POST">
+            <?php echo \App\Helpers\Security::csrfField(); ?>
             <div class="input-box">
                 <i class="fa fa-user"></i>
                 <input type="text" name="username" placeholder="Usuario" required autocomplete="username">
@@ -252,7 +253,7 @@
                 <a href="#">¿Olvidaste tu contraseña?</a>
             </div>
 
-            <button class="btn-login" type="submit">
+            <button class="btn-login" type="submit" id="btnSubmit">
                 Ingresar
             </button>
         </form>
@@ -287,14 +288,61 @@
             }
         });
 
-        // EFECTO BOTON LOGIN
-        const form = document.querySelector('form');
-        const btn = document.querySelector('.btn-login');
+        // AJAX LOGIN
+        const form = document.getElementById('loginForm');
+        const btn = document.getElementById('btnSubmit');
 
-        form.addEventListener('submit', (e) => {
-            // Permitimos el envío real, pero cambiamos visualmente el botón
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const originalText = btn.innerHTML;
             btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Ingresando...';
             btn.style.pointerEvents = 'none';
+            btn.style.opacity = '0.8';
+
+            try {
+                const formData = new FormData(form);
+                const response = await fetch('index.php?action=login&ajax=1', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    btn.innerHTML = '<i class="fa fa-check"></i> ¡Éxito!';
+                    btn.style.background = 'linear-gradient(90deg, #10b981, #059669)';
+                    setTimeout(() => {
+                        window.location.href = result.redirect;
+                    }, 500);
+                } else {
+                    btn.innerHTML = originalText;
+                    btn.style.pointerEvents = 'auto';
+                    btn.style.opacity = '1';
+                    
+                    // Show error alert
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error de acceso',
+                            text: result.message || 'Usuario o contraseña incorrectos.',
+                            background: '#1e293b',
+                            color: '#fff'
+                        });
+                    } else {
+                        alert(result.message || 'Usuario o contraseña incorrectos.');
+                    }
+                }
+            } catch (error) {
+                console.error(error);
+                btn.innerHTML = originalText;
+                btn.style.pointerEvents = 'auto';
+                btn.style.opacity = '1';
+                alert('Ocurrió un error de conexión.');
+            }
         });
     </script>
     <?php require __DIR__ . '/../partials/alerts.php'; ?>

@@ -90,6 +90,7 @@
             </div>
 
             <form action="index.php?action=enroll" method="POST">
+                <?php echo \App\Helpers\Security::csrfField(); ?>
                 <input type="hidden" name="course_id" value="<?php echo $course['id']; ?>">
 
                 <div class="form-group">

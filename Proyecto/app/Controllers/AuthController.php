@@ -1,88 +1,106 @@
 <?php
 namespace App\Controllers;
 
+use App\Core\Controller;
+use App\Helpers\Security;
 use App\Models\User;
-use App\Services\EmailService;
+use App\Helpers\EmailService;
 
-class AuthController {
+class AuthController extends Controller {
     
     public function login() {
-        $error = '';
-        
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $isAjax = $this->isAjax();
+
+        if ($this->isPost()) {
+            Security::verifyCsrf();
+
             $user = new User();
-            $user->username = $_POST['username'] ?? '';
+            $user->username = $this->input('username');
             $password = $_POST['password'] ?? '';
-            
+
             if (!empty($user->username) && !empty($password)) {
                 if ($user->usernameExists() && password_verify($password, $user->password)) {
-                    // Verificar status de aprobación
                     if ($user->status === 'pending') {
-                        $_SESSION['swal_error'] = "Tu cuenta está pendiente de aprobación por el administrador.";
-                    } else if ($user->status === 'rejected') {
-                        $_SESSION['swal_error'] = "Tu cuenta ha sido rechazada. Contacta al administrador.";
+                        $msg = "Tu cuenta está pendiente de aprobación por el administrador.";
+                        if ($isAjax) $this->json(['success' => false, 'message' => $msg]);
+                        $_SESSION['swal_error'] = $msg;
+                    } elseif ($user->status === 'rejected') {
+                        $msg = "Tu cuenta ha sido rechazada. Contacta al administrador.";
+                        if ($isAjax) $this->json(['success' => false, 'message' => $msg]);
+                        $_SESSION['swal_error'] = $msg;
                     } else {
-                        $_SESSION['user_id'] = $user->id;
+                        Security::regenerateSession();
+                        $_SESSION['user_id']  = $user->id;
                         $_SESSION['username'] = $user->username;
-                        $_SESSION['role'] = $user->role;
-                        
-                        if ($user->role === 'admin') {
-                            header('Location: index.php?action=admin_dashboard');
-                        } else {
-                            header('Location: index.php?action=dashboard');
-                        }
-                        exit;
+                        $_SESSION['role']     = $user->role;
+
+                        $redirect = ($user->role === 'admin')
+                            ? 'index.php?action=admin_dashboard'
+                            : 'index.php?action=dashboard';
+
+                        if ($isAjax) $this->json(['success' => true, 'redirect' => $redirect]);
+                        $this->redirect($redirect);
                     }
                 } else {
-                    $_SESSION['swal_error'] = "Usuario o contraseña incorrectos.";
+                    $msg = "Usuario o contraseña incorrectos.";
+                    if ($isAjax) $this->json(['success' => false, 'message' => $msg]);
+                    $_SESSION['swal_error'] = $msg;
                 }
             } else {
-                $_SESSION['swal_error'] = "Por favor, complete todos los campos.";
+                $msg = "Por favor, complete todos los campos.";
+                if ($isAjax) $this->json(['success' => false, 'message' => $msg]);
+                $_SESSION['swal_error'] = $msg;
             }
         }
-        
+
         require_once __DIR__ . '/../Views/auth/login.php';
     }
     
     public function register() {
-        $error = '';
-        $success = '';
-        
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $user = new User();
-            $user->username = $_POST['username'] ?? '';
-            $user->email = $_POST['email'] ?? '';
-            $password = $_POST['password'] ?? '';
-            
-            if (!empty($user->username) && !empty($user->email) && !empty($password)) {
-                if (!filter_var($user->email, FILTER_VALIDATE_EMAIL)) {
-                    $_SESSION['swal_error'] = "El correo electrónico no es válido.";
-                } else if ($user->usernameExists()) {
-                    $_SESSION['swal_error'] = "El usuario ya existe. Elija otro nombre.";
-                } else {
-                    $user->password = password_hash($password, PASSWORD_DEFAULT);
-                    $user->role = 'user';
-                    
-                    if ($user->create()) {
-                        // Enviar correo de notificación de registro exitoso (pendiente de aprobación)
-                        EmailService::sendRegistrationEmail($user->email, $user->username);
-                        
-                        // Notificar a todos los administradores registrados
-                        $admins = $user->getAdmins();
-                        foreach ($admins as $admin) {
-                            EmailService::sendAdminNotificationEmail($admin['email'], $admin['username'], $user->username, $user->email);
-                        }
+        $isAjax = $this->isAjax();
 
-                        $_SESSION['swal_success'] = "Registro exitoso. Tu cuenta está pendiente de aprobación por el administrador. Recibirás un correo cuando sea aprobada.";
-                    } else {
-                        $_SESSION['swal_error'] = "Error al registrar el usuario. El correo podría estar en uso.";
-                    }
-                }
+        if ($this->isPost()) {
+            Security::verifyCsrf();
+
+            $user = new User();
+            $user->username = $this->input('username');
+            $user->email    = $this->input('email');
+            $password = $_POST['password'] ?? '';
+
+            if (empty($user->username) || empty($user->email) || empty($password)) {
+                $msg = "Todos los campos son requeridos.";
+                if ($isAjax) $this->json(['success' => false, 'message' => $msg]);
+                $_SESSION['swal_error'] = $msg;
+            } elseif (!filter_var($user->email, FILTER_VALIDATE_EMAIL)) {
+                $msg = "El correo electrónico no es válido.";
+                if ($isAjax) $this->json(['success' => false, 'message' => $msg]);
+                $_SESSION['swal_error'] = $msg;
+            } elseif ($user->usernameExists()) {
+                $msg = "El nombre de usuario ya está en uso.";
+                if ($isAjax) $this->json(['success' => false, 'message' => $msg]);
+                $_SESSION['swal_error'] = $msg;
             } else {
-                $_SESSION['swal_error'] = "Por favor, complete todos los campos.";
+                $user->password = password_hash($password, PASSWORD_BCRYPT);
+                $user->role     = 'user';
+                $user->status   = 'pending';
+
+                if ($user->create()) {
+                    EmailService::sendRegistrationEmail($user->email, $user->username);
+                    // Notificar al administrador principal
+                    EmailService::sendAdminNotificationEmail(
+                        'sebastian321hernandezno@gmail.com', 'Administrador', $user->username, $user->email
+                    );
+                    if ($isAjax) $this->json(['success' => true, 'redirect' => 'index.php?action=login']);
+                    $this->redirectWithSuccess('index.php?action=login',
+                        'Registro exitoso. Tu cuenta está pendiente de aprobación.');
+                } else {
+                    $msg = "Error al registrar el usuario. El correo podría estar en uso.";
+                    if ($isAjax) $this->json(['success' => false, 'message' => $msg]);
+                    $_SESSION['swal_error'] = $msg;
+                }
             }
         }
-        
+
         require_once __DIR__ . '/../Views/auth/register.php';
     }
     
@@ -267,9 +285,8 @@ class AuthController {
     }
     
     public function logout() {
+        session_unset();
         session_destroy();
-        header('Location: index.php');
-        exit;
+        $this->redirect('index.php');
     }
 }
-?>

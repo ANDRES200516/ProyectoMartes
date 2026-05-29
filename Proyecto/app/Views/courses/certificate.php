@@ -296,8 +296,19 @@
 
     <!-- Botones de Acción -->
     <div class="actions-bar">
-        <a href="index.php?action=dashboard" class="btn-back"><i class="fa-solid fa-arrow-left"></i> Volver a Mis Cursos</a>
+        <?php if (!$isPublic): ?>
+            <a href="index.php?action=dashboard" class="btn-back"><i class="fa-solid fa-arrow-left"></i> Volver a Mis Cursos</a>
+        <?php else: ?>
+            <a href="index.php" class="btn-back"><i class="fa-solid fa-home"></i> Ir a Learns class</a>
+        <?php endif; ?>
+        
         <button onclick="window.print()" class="btn-print"><i class="fa-solid fa-file-pdf"></i> Guardar como PDF / Imprimir</button>
+        
+        <?php if (!$isPublic): ?>
+        <a href="https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=<?php echo urlencode($certificate['course_title']); ?>&organizationName=Learns%20class&issueYear=<?php echo date('Y', strtotime($certificate['issued_at'])); ?>&issueMonth=<?php echo date('n', strtotime($certificate['issued_at'])); ?>&certUrl=<?php echo urlencode('http://' . $_SERVER['HTTP_HOST'] . '/index.php?action=certificate&code=' . $certificate['code']); ?>&certId=<?php echo $certificate['code']; ?>" target="_blank" class="btn-print" style="background: linear-gradient(135deg, #0077b5 0%, #005582 100%); color: white;">
+            <i class="fa-brands fa-linkedin"></i> Compartir en LinkedIn
+        </a>
+        <?php endif; ?>
     </div>
 
 </body>

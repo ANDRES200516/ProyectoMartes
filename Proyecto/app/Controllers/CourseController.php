@@ -1,6 +1,8 @@
 <?php
 namespace App\Controllers;
 
+use App\Core\Controller;
+use App\Helpers\Security;
 use App\Models\Course;
 use App\Models\Module;
 use App\Models\Lesson;
@@ -9,11 +11,13 @@ use App\Models\Review;
 use App\Models\Certificate;
 use App\Models\Notification;
 
-class CourseController {
+class CourseController extends Controller {
     public function __construct() {
-        if (!isset($_SESSION['user_id'])) {
-            header('Location: index.php?action=login');
-            exit;
+        // Public actions that don't require auth
+        $publicActions = ['certificate'];
+        $action = $_GET['action'] ?? '';
+        if (!in_array($action, $publicActions, true)) {
+            $this->auth();
         }
     }
 
@@ -33,6 +37,12 @@ class CourseController {
         // Get unread notifications
         $notifModel = new Notification();
         $notifications = $notifModel->getUnreadByUser($_SESSION['user_id']);
+
+        // Gamification Stats
+        $gamification = new \App\Models\Gamification();
+        $userXp = $gamification->getTotalPoints($_SESSION['user_id']);
+        $userStreak = $gamification->getStreak($_SESSION['user_id']);
+        $userRank = $gamification->getUserRank($_SESSION['user_id']);
 
         require_once __DIR__ . '/../Views/user/dashboard.php';
     }
@@ -369,7 +379,8 @@ class CourseController {
     }
 
     public function enroll() {
-        $courseId = $_POST['course_id'] ?? '';
+        Security::verifyCsrf();
+        $courseId   = $_POST['course_id'] ?? '';
         $motivation = $_POST['motivation'] ?? '';
         $knowledge = $_POST['knowledge_level'] ?? '';
         $hours = $_POST['weekly_hours'] ?? '';
@@ -483,6 +494,7 @@ class CourseController {
     public function markLessonProgress() {
         $lessonId = $_POST['lesson_id'] ?? null;
         $completed = isset($_POST['completed']) ? intval($_POST['completed']) : 0;
+        $enrollmentModel = new Enrollment();
 
         if ($lessonId) {
             $lessonModel = new Lesson();
@@ -492,12 +504,22 @@ class CourseController {
                 $enrollmentModel = new Enrollment();
                 $enrollment = $enrollmentModel->getEnrollmentDetails($_SESSION['user_id'], $lesson['course_id']);
                 
+                // GAMIFICATION: +10 XP for lesson completion
+                $gamification = new \App\Models\Gamification();
+                $gamification->addPoints($_SESSION['user_id'], 'lesson_complete', $lessonId);
+                $gamification->updateStreak($_SESSION['user_id']);
+                $newBadges = $gamification->checkAndAwardBadges($_SESSION['user_id']);
+
                 header('Content-Type: application/json');
-                echo json_encode([
+                $response = [
                     'success' => true,
                     'progress_percentage' => $enrollment['progress_percentage'],
                     'status' => $enrollment['status']
-                ]);
+                ];
+                if (!empty($newBadges)) {
+                    $response['new_badges'] = $newBadges;
+                }
+                echo json_encode($response);
                 exit;
             }
         }
@@ -507,10 +529,11 @@ class CourseController {
     }
 
     public function saveReview() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if ($this->isPost()) {
+            Security::verifyCsrf();
             $courseId = $_POST['course_id'];
-            $rating = intval($_POST['rating']);
-            $comment = $_POST['comment'] ?? '';
+            $rating   = intval($_POST['rating']);
+            $comment  = $this->input('comment');
 
             $reviewModel = new Review();
             if ($reviewModel->addReview($_SESSION['user_id'], $courseId, $rating, $comment)) {
@@ -521,6 +544,96 @@ class CourseController {
             header('Location: index.php?action=course_details&course=' . $courseId);
             exit;
         }
+    }
+
+    public function quiz() {
+        $moduleId = $_GET['module'] ?? '';
+        
+        $moduleModel = new Module();
+        $module = $moduleModel->findById($moduleId);
+        
+        if (!$module) {
+            $_SESSION['swal_error'] = 'Módulo no encontrado.';
+            header('Location: index.php?action=dashboard');
+            exit;
+        }
+
+        $quizModel = new \App\Models\Quiz();
+        $quiz = $quizModel->findByModuleId($moduleId);
+
+        if (!$quiz) {
+            $_SESSION['swal_error'] = 'Este módulo no tiene un examen configurado.';
+            header('Location: index.php?action=course_details&course=' . $module['course_id']);
+            exit;
+        }
+
+        $questionModel = new \App\Models\Question();
+        $questions = $questionModel->getByQuizId($quiz['id']);
+
+        // Prevent passing if there are no questions
+        if (empty($questions)) {
+            $_SESSION['swal_error'] = 'El examen aún no tiene preguntas configuradas.';
+            header('Location: index.php?action=course_details&course=' . $module['course_id']);
+            exit;
+        }
+
+        require_once __DIR__ . '/../Views/courses/quiz.php';
+    }
+
+    public function submitQuiz() {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            header('Location: index.php?action=dashboard');
+            exit;
+        }
+
+        $quizId = $_POST['quiz_id'] ?? '';
+        $answers = $_POST['answers'] ?? []; // Associative array of question_id => answer
+        
+        $quizModel = new \App\Models\Quiz();
+        $quiz = $quizModel->findById($quizId);
+
+        if (!$quiz) {
+            echo json_encode(['success' => false, 'message' => 'Examen inválido.']);
+            exit;
+        }
+
+        $questionModel = new \App\Models\Question();
+        $questions = $questionModel->getByQuizId($quizId);
+        
+        $totalQuestions = count($questions);
+        $correctCount = 0;
+
+        foreach ($questions as $q) {
+            $qId = $q['id'];
+            if (isset($answers[$qId]) && $answers[$qId] === $q['correct_option']) {
+                $correctCount++;
+            }
+        }
+
+        $score = ($totalQuestions > 0) ? ($correctCount / $totalQuestions) * 100 : 0;
+        $passed = ($score >= 70) ? 1 : 0; // Minimum 70% to pass
+
+        $quizModel->saveAttempt($_SESSION['user_id'], $quizId, $score, $passed);
+
+        $newBadges = [];
+        if ($passed) {
+            // GAMIFICATION: +30 XP for passing, +40 XP if perfect score
+            $gamification = new \App\Models\Gamification();
+            $gamification->addPoints($_SESSION['user_id'], $score == 100 ? 'quiz_perfect' : 'quiz_pass', $quizId);
+            $gamification->updateStreak($_SESSION['user_id']);
+            $newBadges = $gamification->checkAndAwardBadges($_SESSION['user_id']);
+            
+            // Check course completion logic and award 'course_complete' if applicable (usually handled in certificate generation, but doing a check here or there)
+        }
+
+        echo json_encode([
+            'success' => true,
+            'score'   => $score,
+            'passed'  => $passed,
+            'message' => $passed ? '¡Felicidades! Has aprobado el examen.' : 'No has alcanzado la nota mínima. Inténtalo de nuevo.',
+            'new_badges' => $newBadges
+        ]);
+        exit;
     }
 
     public function certificate() {
@@ -535,6 +648,7 @@ class CourseController {
         }
 
         // Render clean HTML printable certificate page
+        $isPublic = !isset($_SESSION['user_id']) || $_SESSION['user_id'] != $certificate['user_id'];
         require_once __DIR__ . '/../Views/courses/certificate.php';
     }
 }

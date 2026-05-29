@@ -1,16 +1,42 @@
 <?php
 namespace App\Controllers;
 
+use App\Core\Controller;
+use App\Helpers\Security;
 use App\Models\Course;
 use App\Models\Module;
 use App\Models\Lesson;
 use App\Models\Enrollment;
 
-class CourseAdminController {
+class CourseAdminController extends Controller {
+    private $isAdmin = false;
+
     public function __construct() {
-        if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-            $_SESSION['swal_error'] = 'No tienes permisos para acceder a esta sección.';
+        if (!isset($_SESSION['user_id'])) {
             header('Location: index.php?action=login');
+            exit;
+        }
+
+        $role = $_SESSION['role'] ?? '';
+        if ($role === 'admin') {
+            $this->isAdmin = true;
+        } elseif ($role !== 'teacher') {
+            $_SESSION['swal_error'] = 'No tienes permisos para acceder a esta sección.';
+            header('Location: index.php?action=dashboard');
+            exit;
+        }
+    }
+
+    /**
+     * Check if the current user (teacher) owns a course.
+     * Admins always pass. If a teacher doesn't own it, redirect.
+     */
+    private function checkOwnership(array $course): void {
+        if ($this->isAdmin) return;
+
+        if ((int)($course['instructor_id'] ?? 0) !== (int)$_SESSION['user_id']) {
+            $_SESSION['swal_error'] = 'No tienes permisos para modificar este curso.';
+            header('Location: index.php?action=admin_courses');
             exit;
         }
     }
@@ -20,31 +46,39 @@ class CourseAdminController {
         
         $filters = [
             'search' => $_GET['search'] ?? '',
-            'level' => $_GET['level'] ?? '',
+            'level'  => $_GET['level'] ?? '',
             'status' => $_GET['status'] ?? '',
-            'sort' => $_GET['sort'] ?? ''
+            'sort'   => $_GET['sort'] ?? ''
         ];
 
+        // Teachers only see their own courses
+        if (!$this->isAdmin) {
+            $filters['instructor_id'] = $_SESSION['user_id'];
+        }
+
         $courses = $courseModel->readAll($filters);
-        $stats = $courseModel->getStats();
+        $stats   = $courseModel->getStats();
 
         require_once __DIR__ . '/../Views/admin/courses.php';
     }
 
     public function create() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if ($this->isPost()) {
+            Security::verifyCsrf();
             $courseModel = new Course();
-            $courseModel->title = $_POST['title'];
-            $courseModel->slug = $this->slugify($_POST['title']);
+            $courseModel->title            = $_POST['title'];
+            $courseModel->slug             = $this->slugify($_POST['title']);
             $courseModel->short_description = $_POST['short_description'];
-            $courseModel->description = $_POST['description'];
-            $courseModel->level = $_POST['level'];
-            $courseModel->duration_hours = $_POST['duration_hours'];
-            $courseModel->requirements = $_POST['requirements'];
-            $courseModel->objectives = $_POST['objectives'];
-            $courseModel->tags = $_POST['tags'];
-            $courseModel->category = $_POST['category'];
-            $courseModel->status = $_POST['status'] ?? 'draft';
+            $courseModel->description      = $_POST['description'];
+            $courseModel->level            = $_POST['level'];
+            $courseModel->duration_hours   = $_POST['duration_hours'];
+            $courseModel->requirements     = $_POST['requirements'];
+            $courseModel->objectives       = $_POST['objectives'];
+            $courseModel->tags             = $_POST['tags'];
+            $courseModel->category         = $_POST['category'];
+            $courseModel->status           = $_POST['status'] ?? 'draft';
+            // Assign current user as instructor
+            $courseModel->instructor_id    = $_SESSION['user_id'];
 
             // Check if slug already exists
             if ($courseModel->findBySlug($courseModel->slug)) {
@@ -92,6 +126,8 @@ class CourseAdminController {
             exit;
         }
 
+        $this->checkOwnership($course);
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $courseModel->id = $id;
             $courseModel->title = $_POST['title'];
@@ -130,10 +166,14 @@ class CourseAdminController {
         $id = $_GET['id'] ?? null;
         if ($id) {
             $courseModel = new Course();
-            if ($courseModel->delete($id)) {
-                $_SESSION['swal_success'] = 'Curso eliminado exitosamente.';
-            } else {
-                $_SESSION['swal_error'] = 'No se pudo eliminar el curso.';
+            $course = $courseModel->findById($id);
+            if ($course) {
+                $this->checkOwnership($course);
+                if ($courseModel->delete($id)) {
+                    $_SESSION['swal_success'] = 'Curso eliminado exitosamente.';
+                } else {
+                    $_SESSION['swal_error'] = 'No se pudo eliminar el curso.';
+                }
             }
         }
         header('Location: index.php?action=admin_courses');
@@ -142,12 +182,16 @@ class CourseAdminController {
 
     public function duplicate() {
         $id = $_GET['id'] ?? null;
+        $courseModel = new Course();
         if ($id) {
-            $courseModel = new Course();
-            if ($courseModel->duplicate($id)) {
-                $_SESSION['swal_success'] = 'Curso clonado exitosamente (en borrador).';
-            } else {
-                $_SESSION['swal_error'] = 'No se pudo clonar el curso.';
+            $course = $courseModel->findById($id);
+            if ($course) {
+                $this->checkOwnership($course);
+                if ($courseModel->duplicate($id)) {
+                    $_SESSION['swal_success'] = 'Curso clonado exitosamente (en borrador).';
+                } else {
+                    $_SESSION['swal_error'] = 'No se pudo clonar el curso.';
+                }
             }
         }
         header('Location: index.php?action=admin_courses');
@@ -184,7 +228,8 @@ class CourseAdminController {
 
     // Module endpoints (AJAX/POST)
     public function saveModule() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if ($this->isPost()) {
+            Security::verifyCsrf();
             $moduleModel = new Module();
             $moduleModel->course_id = $_POST['course_id'];
             $moduleModel->title = $_POST['title'];
@@ -227,7 +272,8 @@ class CourseAdminController {
 
     // Lesson endpoints (POST)
     public function saveLesson() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if ($this->isPost()) {
+            Security::verifyCsrf();
             $lessonModel = new Lesson();
             $lessonModel->module_id = $_POST['module_id'];
             $lessonModel->title = $_POST['title'];

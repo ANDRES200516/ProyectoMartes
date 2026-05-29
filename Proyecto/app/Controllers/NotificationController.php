@@ -1,22 +1,18 @@
 <?php
 namespace App\Controllers;
 
+use App\Core\Controller;
 use App\Models\Notification;
 
-class NotificationController {
+class NotificationController extends Controller {
+
     public function __construct() {
-        if (!isset($_SESSION['user_id'])) {
-            header('Location: index.php?action=login');
-            exit;
-        }
+        $this->auth();
     }
 
     public function markAllRead() {
         $notif = new Notification();
         $notif->markAllAsRead($_SESSION['user_id']);
-        header('Content-Type: application/json');
-        echo json_encode(['success' => true]);
-        exit;
+        $this->json(['success' => true]);
     }
 }
-?>

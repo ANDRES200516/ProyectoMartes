@@ -89,6 +89,7 @@
             </div>
 
             <form action="index.php?action=admin_courses_create" method="POST" enctype="multipart/form-data">
+                <?php echo \App\Helpers\Security::csrfField(); ?>
                 <div class="form-grid">
                     
                     <div class="form-group full-width">

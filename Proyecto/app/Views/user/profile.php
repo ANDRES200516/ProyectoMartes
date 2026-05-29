@@ -73,6 +73,7 @@
                             <label for="photo" class="btn" style="padding:0.6rem 1rem; font-size:0.9rem;">Cambiar Foto</label>
                         </div>
                         <form action="index.php?action=update_photo" method="POST" enctype="multipart/form-data" id="avatarForm">
+                            <?php echo \App\Helpers\Security::csrfField(); ?>
                             <input type="file" id="photo" name="photo" accept="image/*" style="display:none;">
                         </form>
                     </div>
@@ -176,6 +177,7 @@
                     <div class="card">
                         <h3>Cambiar contraseña</h3>
                         <form action="index.php?action=update_password" method="POST" style="margin-top:0.8rem; max-width:480px;">
+                            <?php echo \App\Helpers\Security::csrfField(); ?>
                             <div class="form-group">
                                 <label for="current_password">Contraseña actual</label>
                                 <input type="password" id="current_password" name="current_password" required>

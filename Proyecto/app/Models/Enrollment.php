@@ -124,6 +124,12 @@ class Enrollment {
                 // Create a notification for the user
                 $notif = new Notification();
                 $notif->create($userId, 'success', '¡Felicitaciones! Has completado el curso y obtenido tu certificado.', "?action=certificate&code=" . $code);
+
+                // GAMIFICATION: +100 XP for course completion
+                $gamification = new Gamification();
+                $gamification->addPoints($userId, 'course_complete', $courseId);
+                $gamification->updateStreak($userId);
+                $gamification->checkAndAwardBadges($userId);
             }
             return true;
         }

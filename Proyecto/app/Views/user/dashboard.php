@@ -242,12 +242,16 @@
             </div>
             <div class="hero-stats">
                 <div class="hero-stat-card">
-                    <span class="num"><?php echo $enrolledCount; ?></span>
-                    <span class="label">Inscritos</span>
+                    <span class="num" style="color: #fbbf24;"><?php echo number_format($userXp); ?></span>
+                    <span class="label">XP Totales</span>
                 </div>
                 <div class="hero-stat-card">
-                    <span class="num" style="color: #10b981;"><?php echo $completedCount; ?></span>
-                    <span class="label">Completados</span>
+                    <span class="num" style="color: #f97316;"><i class="fa-solid fa-fire" style="font-size:1.5rem;"></i> <?php echo $userStreak['current_streak'] ?? 0; ?></span>
+                    <span class="label">Días de Racha</span>
+                </div>
+                <div class="hero-stat-card">
+                    <span class="num" style="color: #38bdf8;">#<?php echo $userRank; ?></span>
+                    <span class="label">Ranking</span>
                 </div>
             </div>
         </div>

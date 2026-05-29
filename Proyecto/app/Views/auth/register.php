@@ -205,7 +205,8 @@
             <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
         <?php endif; ?>
 
-        <form action="index.php?action=register" method="POST">
+        <form id="registerForm" action="index.php?action=register" method="POST">
+            <?php echo \App\Helpers\Security::csrfField(); ?>
             <div class="input-box">
                 <i class="fa fa-user"></i>
                 <input type="text" name="username" placeholder="Nombre de usuario" required autocomplete="username">
@@ -221,7 +222,7 @@
                 <input type="password" name="password" placeholder="Contraseña" required autocomplete="new-password">
             </div>
 
-            <button type="submit" class="btn-register">Crear cuenta</button>
+            <button type="submit" class="btn-register" id="btnSubmit">Crear cuenta</button>
 
             <div class="login-link">
                 ¿Ya tienes cuenta? <a href="index.php?action=login">Inicia sesión</a>
@@ -235,8 +236,78 @@
                 <a href="index.php?action=github_login" title="Registrarse con GitHub"><i class="fab fa-github"></i></a>
             </div>
         </div>
+            </div>
         </div>
     </div>
+    
+    <script>
+        // AJAX REGISTER
+        const form = document.getElementById('registerForm');
+        const btn = document.getElementById('btnSubmit');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Procesando...';
+            btn.style.pointerEvents = 'none';
+            btn.style.opacity = '0.8';
+
+            try {
+                const formData = new FormData(form);
+                const response = await fetch('index.php?action=register&ajax=1', {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    btn.innerHTML = '<i class="fa fa-check"></i> ¡Cuenta Creada!';
+                    btn.style.background = 'linear-gradient(90deg, #10b981, #059669)';
+                    
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'success',
+                            title: '¡Registro Exitoso!',
+                            text: 'Tu cuenta ha sido creada y está pendiente de aprobación por el administrador.',
+                            background: '#1e293b',
+                            color: '#fff'
+                        }).then(() => {
+                            window.location.href = result.redirect;
+                        });
+                    } else {
+                        alert('¡Registro Exitoso! Tu cuenta está pendiente de aprobación.');
+                        window.location.href = result.redirect;
+                    }
+                } else {
+                    btn.innerHTML = originalText;
+                    btn.style.pointerEvents = 'auto';
+                    btn.style.opacity = '1';
+                    
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: result.message || 'Error al crear la cuenta.',
+                            background: '#1e293b',
+                            color: '#fff'
+                        });
+                    } else {
+                        alert(result.message || 'Error al crear la cuenta.');
+                    }
+                }
+            } catch (error) {
+                console.error(error);
+                btn.innerHTML = originalText;
+                btn.style.pointerEvents = 'auto';
+                btn.style.opacity = '1';
+                alert('Ocurrió un error de conexión.');
+            }
+        });
+    </script>
+    
     <?php require __DIR__ . '/../partials/alerts.php'; ?>
 </body>
 </html>

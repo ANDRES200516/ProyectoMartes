@@ -22,6 +22,7 @@
             <p style="text-align: center; color: var(--text-muted); margin-bottom: 2rem;">Editando a: <strong><?php echo htmlspecialchars($user->username); ?></strong></p>
             
             <form action="index.php?action=update_user" method="POST">
+                <?php echo \App\Helpers\Security::csrfField(); ?>
                 <input type="hidden" name="id" value="<?php echo $user->id; ?>">
                 
                 <div class="form-group">
